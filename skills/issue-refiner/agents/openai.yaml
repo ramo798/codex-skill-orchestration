@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue Refiner"
+  short_description: "Refine one labeled issue into ready spec with lock safety"
+  default_prompt: "Refine exactly one target-labeled issue into a ready state with strict lock and dependency guards."

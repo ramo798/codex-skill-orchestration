@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ready Worker"
+  short_description: "Implement one ready issue into a PR with lock safety"
+  default_prompt: "Implement exactly one ready issue, run required checks, and create a PR with strict lock handling."

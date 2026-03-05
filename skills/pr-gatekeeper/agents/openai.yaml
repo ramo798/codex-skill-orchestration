@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Gatekeeper"
+  short_description: "Gate one codex PR for CI and risk, then merge if safe"
+  default_prompt: "Evaluate exactly one labeled PR, enforce CI and risk guards, and merge only when all safety checks pass."
