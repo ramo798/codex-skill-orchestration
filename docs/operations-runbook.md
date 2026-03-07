@@ -21,6 +21,9 @@
 
 - 1実行1Issue / 1実行1PR
 - ロック競合検知時は即停止（リトライしない）
+- `agent:in-progress` / `agent:gate-lock` は見える化用であり、排他の正本は Git ref lock とする
+- Issue系スキルは `refs/heads/agent-lock/issues/<issue番号>` を共有し、PR系スキルは `refs/heads/agent-lock/prs/<PR番号>` を使う
+- lock ref を取れない時は権限不足を含めて停止し、ラベルだけで続行しない
 - ready以外は実装しない
 - 高リスクPRは自動マージしない
 
@@ -56,7 +59,7 @@
 - 実装可: `agent:ready`
 
 3. 実装
-- 開始: `agent:in-progress`
+- 開始: lock ref 取得 + `agent:in-progress`
 - PR作成後: Issue `agent:pr-open` / PR `agent:needs-review` + `agent:codex-pr`
 
 4. PRゲート
@@ -70,11 +73,13 @@
 - コメントに停止理由と次アクションを1行で残す
 
 2. `agent:qa-failed`（PR）
-- CI未実行/失敗、またはゲート条件未達
-- コメントに不足条件（例: `no checks reported`）を明記
+- CIチェック失敗、またはゲート条件未達
+- CIチェックが0件（`no checks reported`）の場合は失敗扱いにしない
+- コメントに不足条件（例: `required check failed`）を明記
 
 ## 6. 直近の反映事項
 
 - Issueテンプレは `agent:codex` 単独付与に変更済み
 - `ready-worker` は Draft PR ではなく通常PR作成へ変更済み
 - QAラベルは `agent:qa-passed / agent:qa-failed` に統一済み
+- 排他制御はラベル依存から Git ref lock 依存へ変更済み

@@ -11,8 +11,9 @@ ready化済みIssueを安全に実装し、PR作成まで進める。`gh` とロ
 
 - 対象は `agent:codex` かつ `agent:ready` のOpen Issueのみ。
 - 1実行1Issueを厳守する。候補が複数あっても先頭1件以外は絶対に触らない。
-- ロックラベル `agent:in-progress` または他assignee検知時は即停止する。
-- ロック取得後に競合が見えたら即停止する。リトライしない。
+- `agent:in-progress` は見える化専用であり、排他の正本にしない。排他の正本は `refs/heads/agent-lock/issues/<issue番号>` の Git ref とする。
+- `issue-refiner` と `ready-worker` は同じIssue lock refを共有し、同一Issueを同時に触れないようにする。
+- lock ref を作れない場合、または取得後に競合が見えた場合は即停止する。ラベルだけで続行しない。
 - 実装範囲は対象IssueのAcceptance Criteriaに一致する範囲だけ。
 - `ready` でないIssueは触らない。
 - PRは通常PRで作成する（`--draft` は使わない）。
@@ -32,6 +33,9 @@ ready化済みIssueを安全に実装し、PR作成まで進める。`gh` とロ
 
 ```bash
 ME="$(gh api user --jq .login)"
+OWNER_REPO="$(gh repo view --json owner,name --jq '.owner.login + "/" + .name')"
+DEFAULT_BRANCH="$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)"
+BASE_SHA="$(gh api "repos/$OWNER_REPO/git/ref/heads/$DEFAULT_BRANCH" --jq .object.sha)"
 ```
 
 2. 対象Issueを1件だけ選ぶ。
@@ -47,15 +51,33 @@ ISSUE_NUMBER="$(gh issue list \
 ```
 
 3. Issueが無ければ終了する。
-4. ロック前チェックを行い、競合要素があれば即停止する。
-5. ロックを取得する。
+4. 候補一覧は参考情報として扱い、対象Issueを再取得してロック前チェックを行う。`agent:in-progress` または他assignee検知時は即停止する。
+5. Issue共通 lock ref を組み立てる。
+
+```bash
+LOCK_REF="refs/heads/agent-lock/issues/$ISSUE_NUMBER"
+LOCK_API_PATH="${LOCK_REF#refs/}"
+```
+
+6. まず lock ref を原子的に作成してロックを取る。`Reference already exists` は競合として扱い即停止する。
+
+```bash
+gh api -X POST "repos/$OWNER_REPO/git/refs" \
+  -f ref="$LOCK_REF" \
+  -f sha="$BASE_SHA"
+```
+
+7. lock ref を取れた時だけ、見える化のために `agent:in-progress` と assignee を付ける。ここが失敗した場合は lock ref を削除して停止する。
 
 ```bash
 gh issue edit "$ISSUE_NUMBER" --add-label agent:in-progress --add-assignee "$ME"
 ```
 
-6. 再取得でロック状態を検証し、競合なら停止する。
-7. Issueタイトルからブランチを作る。
+8. 再取得でロック状態を検証する。最低でも次を満たさない限り停止する。
+- `gh api "repos/$OWNER_REPO/git/ref/$LOCK_API_PATH"` が成功する
+- `agent:in-progress` が付いている
+- assignee に `ME` 以外がいない
+9. Issueタイトルからブランチを作る。
 
 ```bash
 TITLE="$(gh issue view "$ISSUE_NUMBER" --json title --jq .title)"
@@ -64,7 +86,7 @@ BRANCH="codex/issue-${ISSUE_NUMBER}-${SLUG}"
 git checkout -b "$BRANCH"
 ```
 
-8. 実装し、必須チェックを実行する。
+10. 実装し、必須チェックを実行する。
 
 ```bash
 npm run typecheck
@@ -72,7 +94,7 @@ npm run biome
 npm run test
 ```
 
-9. 変更をコミットし、通常PRを作る。
+11. 変更をコミットし、通常PRを作る。
 - PR本文は日本語で詳細に記載する。
 - `何を変えたか` `なぜ必要か` `テスト結果` `未対応事項` を明記する。
 
@@ -83,11 +105,13 @@ git push -u origin "$BRANCH"
 gh pr create --fill --base main --head "$BRANCH"
 ```
 
-10. IssueにPRリンクをコメントし、Issueには `agent:pr-open` を付与する。PRには `agent:needs-review` を付与する。
-11. 成否にかかわらず最後にロック解除を試みる。
+12. Issueにコメントやラベル更新を行う直前には、手順8のロック再確認を必ずやり直す。
+13. IssueにPRリンクをコメントし、Issueには `agent:pr-open` を付与する。PRには `agent:needs-review` を付与する。
+14. 成否にかかわらず最後にロック解除を試みる。見える化ラベルの解除に失敗しても lock ref の削除は必ず試みる。
 
 ```bash
 gh issue edit "$ISSUE_NUMBER" --remove-label agent:in-progress --remove-assignee "$ME"
+gh api -X DELETE "repos/$OWNER_REPO/git/refs/$LOCK_API_PATH"
 ```
 
 ## 停止条件

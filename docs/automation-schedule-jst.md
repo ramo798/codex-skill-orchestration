@@ -28,13 +28,14 @@
 ## 停止・保留条件
 
 - ロック競合時: 即停止
+- lock ref を取得できない時: 即停止
 - `issue-refiner`: `agent:refine`（追加回答待ち）で保留
 - `pr-gatekeeper`: `agent:qa-failed` で保留
 
 ## 将来拡張（必要になったら）
 
 1. `stale-lock-reaper`（1時間ごと）
-- 24時間無更新のロックを解除
+- 24時間無更新の lock ref と見える化ラベルを解除
 
 2. `metrics-reporter`（週1）
 - ready化率、PRリードタイム、QA失敗率を可視化
