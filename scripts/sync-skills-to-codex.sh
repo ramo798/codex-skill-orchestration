@@ -20,6 +20,8 @@ for skill in "${SKILLS[@]}"; do
   fi
 
   mkdir -p "$DST_DIR/$skill"
+  # Trailing slashes copy the directory *contents*; --delete then mirrors the
+  # source exactly, removing files under the destination that no longer exist here.
   rsync -a --delete "$SRC_DIR/$skill/" "$DST_DIR/$skill/"
   echo "[OK] synced: $skill"
 done
